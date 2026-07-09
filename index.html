@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>School Secretary AI MVP</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Main navigation">
+        <div class="brand">
+          <div class="brand-mark">S</div>
+          <div>
+            <strong>Secretary</strong>
+            <span>School work assistant</span>
+          </div>
+        </div>
+
+        <nav class="nav-list">
+          <button class="nav-item active" data-view="today" title="Today">Today</button>
+          <button class="nav-item" data-view="tasks" title="Tasks">Tasks</button>
+          <button class="nav-item" data-view="students" title="Students">Students</button>
+          <button class="nav-item" data-view="notes" title="Notes">Notes</button>
+          <button class="nav-item" data-view="assistant" title="Assistant">Assistant</button>
+        </nav>
+
+        <div class="sidebar-footer">
+          <span id="openCount">0 open</span>
+          <span id="overdueCount">0 overdue</span>
+        </div>
+      </aside>
+
+      <main class="main">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow" id="todayDate">Today</p>
+            <h1 id="viewTitle">Good morning, Michael.</h1>
+          </div>
+          <div class="quick-actions">
+            <span class="mode-badge" id="dataMode">Local mode</span>
+            <button class="secondary-button" id="signInButton">Sign in</button>
+            <button class="secondary-button hidden" id="signOutButton">Sign out</button>
+            <button class="icon-button" id="resetDemo" title="Reset demo data" aria-label="Reset demo data">R</button>
+            <button class="primary-button" id="quickAddTask">+ Task</button>
+          </div>
+        </header>
+
+        <section class="view active" id="today">
+          <div class="briefing">
+            <div>
+              <h2>Daily Briefing</h2>
+              <p id="briefingText">Loading your day...</p>
+            </div>
+            <button class="secondary-button" id="generateBriefing">Refresh</button>
+          </div>
+
+          <div class="dashboard-grid">
+            <section class="panel">
+              <div class="panel-header">
+                <h2>Schedule</h2>
+                <span id="nextEventLabel">Next up</span>
+              </div>
+              <div class="timeline" id="scheduleList"></div>
+            </section>
+
+            <section class="panel">
+              <div class="panel-header">
+                <h2>Priorities</h2>
+                <span>Open tasks</span>
+              </div>
+              <div class="task-stack" id="priorityList"></div>
+            </section>
+
+            <section class="panel wide">
+              <div class="panel-header">
+                <h2>Student Follow-ups</h2>
+                <span>Needs attention</span>
+              </div>
+              <div class="student-strip" id="followupList"></div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="tasks">
+          <div class="toolbar">
+            <div class="segmented" role="tablist" aria-label="Task filters">
+              <button class="segment active" data-filter="all">All</button>
+              <button class="segment" data-filter="today">Today</button>
+              <button class="segment" data-filter="overdue">Overdue</button>
+              <button class="segment" data-filter="done">Done</button>
+            </div>
+            <button class="primary-button" id="addTaskFromTasks">+ Task</button>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Task</th>
+                  <th>Category</th>
+                  <th>Priority</th>
+                  <th>Due</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="taskTable"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="view" id="students">
+          <div class="toolbar">
+            <input class="search-input" id="studentSearch" placeholder="Search students, goals, countries..." />
+            <button class="primary-button" id="addStudent">+ Student</button>
+          </div>
+          <div class="student-grid" id="studentGrid"></div>
+        </section>
+
+        <section class="view" id="notes">
+          <form class="note-composer" id="noteForm">
+            <textarea id="noteText" placeholder="Paste or dictate a meeting note. Example: Student A wants Mechanical Engineering in Australia. Follow up next Friday."></textarea>
+            <div class="form-row">
+              <select id="noteType">
+                <option>Meeting</option>
+                <option>Parent Call</option>
+                <option>Lesson</option>
+                <option>Admin</option>
+              </select>
+              <button class="primary-button" type="submit">Save Note</button>
+            </div>
+          </form>
+          <div class="note-list" id="noteList"></div>
+        </section>
+
+        <section class="view" id="assistant">
+          <div class="assistant-layout">
+            <div class="assistant-thread" id="assistantThread"></div>
+            <form class="assistant-box" id="assistantForm">
+              <input id="assistantInput" placeholder="Try: Add task prepare University Fair presentation by Friday" autocomplete="off" />
+              <button class="primary-button" type="submit">Send</button>
+            </form>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <dialog id="taskDialog">
+      <form method="dialog" id="taskForm">
+        <h2>New Task</h2>
+        <label>
+          Task
+          <input id="taskTitle" required />
+        </label>
+        <div class="field-grid">
+          <label>
+            Category
+            <select id="taskCategory">
+              <option>Counselling</option>
+              <option>Teaching</option>
+              <option>Admin</option>
+              <option>University</option>
+            </select>
+          </label>
+          <label>
+            Priority
+            <select id="taskPriority">
+              <option>High</option>
+              <option>Medium</option>
+              <option>Low</option>
+            </select>
+          </label>
+        </div>
+        <label>
+          Due date
+          <input id="taskDue" type="date" required />
+        </label>
+        <menu>
+          <button class="secondary-button" value="cancel">Cancel</button>
+          <button class="primary-button" id="saveTask" value="default">Save</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <dialog id="studentDialog">
+      <form method="dialog" id="studentForm">
+        <h2>New Student</h2>
+        <label>
+          Name
+          <input id="studentName" required />
+        </label>
+        <label>
+          Goal
+          <input id="studentGoal" placeholder="Medicine in the UK" required />
+        </label>
+        <label>
+          Next action
+          <input id="studentAction" placeholder="Check IELTS requirement" required />
+        </label>
+        <label>
+          Deadline
+          <input id="studentDeadline" type="date" required />
+        </label>
+        <menu>
+          <button class="secondary-button" value="cancel">Cancel</button>
+          <button class="primary-button" id="saveStudent" value="default">Save</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <dialog id="authDialog">
+      <form method="dialog" id="authForm">
+        <h2>Sign in</h2>
+        <p class="dialog-copy">Enter your email and Supabase will send you a magic link. Once signed in, your tasks, students, and notes sync online.</p>
+        <label>
+          Email
+          <input id="authEmail" type="email" placeholder="you@example.com" required />
+        </label>
+        <p class="muted" id="authMessage"></p>
+        <menu>
+          <button class="secondary-button" value="cancel">Cancel</button>
+          <button class="primary-button" id="sendMagicLink" value="default">Send Link</button>
+        </menu>
+      </form>
+    </dialog>
+
+    <script src="config.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
