@@ -30,7 +30,7 @@ const seedData = {
     { id: crypto.randomUUID(), type: "Meeting", text: "Student A wants Mechanical Engineering in Australia. Next step: send a shortlist and check application deadlines.", createdAt: new Date().toISOString() }
   ],
   assistant: [
-    { role: "assistant", text: "Good morning, Michael. Ask me what you need to do today, or tell me to add a task, student follow-up, or note." }
+    { role: "assistant", text: "Hi Michael. Ask me what you need to do today, or tell me to add a task, student follow-up, or note." }
   ]
 };
 
@@ -42,7 +42,7 @@ let cloudReady = false;
 let syncing = false;
 
 const viewTitles = {
-  today: "Good morning, Michael.",
+  today: "Hi Michael",
   tasks: "Tasks",
   students: "Student Follow-ups",
   notes: "Meeting Notes",
@@ -102,7 +102,7 @@ async function initializeSupabase() {
     }
     renderAuthState();
   } catch (error) {
-    updateCloudStatus("Supabase unavailable", false);
+    updateCloudStatus("Supabase unavailable", "offline");
     document.getElementById("signInButton").classList.add("hidden");
     document.getElementById("signOutButton").classList.add("hidden");
     console.warn(error);
@@ -116,18 +116,20 @@ function renderAuthState() {
   document.getElementById("signOutButton").classList.toggle("hidden", !isSignedIn);
 
   if (!isConfigured) {
-    updateCloudStatus("Local mode", false);
+    updateCloudStatus("Local mode", "offline");
   } else if (isSignedIn) {
-    updateCloudStatus("Online sync", true);
+    updateCloudStatus("Online sync", "online");
   } else {
-    updateCloudStatus("Supabase ready", false);
+    updateCloudStatus("Supabase ready. Sign in to sync.", "standby");
   }
 }
 
-function updateCloudStatus(text, online) {
+function updateCloudStatus(text, status) {
   const badge = document.getElementById("dataMode");
-  badge.textContent = text;
-  badge.classList.toggle("online", online);
+  badge.title = text;
+  badge.setAttribute("aria-label", text);
+  badge.classList.remove("online", "standby", "offline");
+  badge.classList.add(status);
 }
 
 async function loadCloudData() {
@@ -373,12 +375,6 @@ function wireForms() {
 
   document.getElementById("generateBriefing").addEventListener("click", renderBriefing);
   document.getElementById("studentSearch").addEventListener("input", renderStudents);
-  document.getElementById("resetDemo").addEventListener("click", async () => {
-    localStorage.removeItem(STORAGE_KEY);
-    state = structuredClone(seedData);
-    await saveState();
-    renderAll();
-  });
 }
 
 function showView(viewId) {
@@ -571,7 +567,7 @@ function makeDailyAnswer() {
   const dueToday = sortTasks(openTasks().filter((task) => task.due === isoToday)).map((task) => task.title).join("; ");
   const overdue = getOverdueTasks().map((task) => task.title).join("; ");
   return [
-    "Good morning, Michael.",
+    "Hi Michael.",
     events ? `Today you have: ${events}.` : "You have no calendar events loaded.",
     dueToday ? `Your priority tasks are: ${dueToday}.` : "No tasks are due today.",
     overdue ? `Overdue: ${overdue}.` : "No overdue tasks."

@@ -68,7 +68,6 @@ button {
   font-weight: 800;
 }
 
-.brand span,
 .sidebar-footer,
 .panel-header span,
 .eyebrow {
@@ -76,7 +75,6 @@ button {
   font-size: 0.85rem;
 }
 
-.brand span,
 .sidebar-footer {
   color: #a8bbb5;
 }
@@ -149,9 +147,8 @@ menu {
 
 .primary-button,
 .secondary-button,
-.icon-button,
 .segment,
-.mode-badge {
+.status-dot {
   min-height: 40px;
   border-radius: 8px;
   border: 1px solid transparent;
@@ -169,36 +166,43 @@ menu {
 }
 
 .secondary-button,
-.icon-button,
 .segment,
-.mode-badge {
+.status-dot {
   color: var(--ink);
   border-color: var(--line);
   background: #ffffff;
 }
 
-.mode-badge {
+.status-dot {
   display: inline-flex;
   align-items: center;
-  padding: 0 12px;
-  color: var(--muted);
-  font-size: 0.84rem;
+  justify-content: center;
+  width: 18px;
+  min-width: 18px;
+  height: 18px;
+  min-height: 18px;
+  padding: 0;
+  border-radius: 999px;
+  box-shadow: 0 0 0 4px rgba(23, 33, 31, 0.06);
 }
 
-.mode-badge.online {
-  color: var(--green);
-  border-color: #b8d9c9;
-  background: #edf8f2;
+.status-dot.online {
+  border-color: #1f8a5b;
+  background: #2fb875;
+}
+
+.status-dot.standby {
+  border-color: #c49028;
+  background: #e5b85d;
+}
+
+.status-dot.offline {
+  border-color: #b42318;
+  background: #e5483b;
 }
 
 .hidden {
   display: none !important;
-}
-
-.icon-button {
-  width: 42px;
-  padding: 0;
-  font-size: 1.2rem;
 }
 
 .view {
@@ -616,7 +620,6 @@ menu {
     grid-template-columns: 1fr;
   }
 
-  .icon-button,
   .primary-button,
   .secondary-button {
     width: 100%;
