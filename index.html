@@ -215,7 +215,12 @@
     <dialog id="authDialog">
       <form method="dialog" id="authForm">
         <h2>Sign in</h2>
-        <p class="dialog-copy">Enter your email and Supabase will send you a magic link. Once signed in, your tasks, students, and notes sync online.</p>
+        <p class="dialog-copy">Use Google sign-in for the smoothest login. Email magic link remains available as a backup.</p>
+        <button class="google-button" id="googleSignIn" type="button">
+          <span class="google-mark">G</span>
+          Continue with Google
+        </button>
+        <div class="divider"><span>or</span></div>
         <label>
           Email
           <input id="authEmail" type="email" placeholder="you@example.com" required />

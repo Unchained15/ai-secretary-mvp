@@ -486,6 +486,25 @@ function wireForms() {
     }
   });
 
+  document.getElementById("googleSignIn").addEventListener("click", async () => {
+    const message = document.getElementById("authMessage");
+    if (!supabaseClient) {
+      message.textContent = "Supabase is not configured yet. Fill in config.js first.";
+      return;
+    }
+
+    const { error } = await supabaseClient.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: window.location.origin + window.location.pathname
+      }
+    });
+
+    if (error) {
+      message.textContent = error.message;
+    }
+  });
+
   document.getElementById("taskForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     state.tasks.push({

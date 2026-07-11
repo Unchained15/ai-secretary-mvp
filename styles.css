@@ -178,6 +178,53 @@ menu {
   background: #ffffff;
 }
 
+.google-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 44px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  background: #ffffff;
+  font-weight: 800;
+}
+
+.google-button:hover {
+  border-color: #b8d9c9;
+  background: #f7fbf8;
+}
+
+.google-mark {
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border-radius: 50%;
+  color: #ffffff;
+  background: #4285f4;
+  font-size: 0.86rem;
+  font-weight: 900;
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.divider::before,
+.divider::after {
+  content: "";
+  height: 1px;
+  flex: 1;
+  background: var(--line);
+}
+
 .status-dot {
   display: inline-flex;
   align-items: center;
