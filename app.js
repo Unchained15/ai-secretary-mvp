@@ -1,5 +1,9 @@
 const STORAGE_KEY = "school-secretary-ai-mvp";
 const SUPABASE_SCRIPT = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2";
+const GOOGLE_API_SCRIPT = "https://apis.google.com/js/api.js";
+const GOOGLE_IDENTITY_SCRIPT = "https://accounts.google.com/gsi/client";
+const GOOGLE_DISCOVERY_DOC = "https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest";
+const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.readonly";
 
 const today = new Date();
 const isoToday = toISODate(today);
@@ -40,6 +44,10 @@ let supabaseClient = null;
 let currentUser = null;
 let cloudReady = false;
 let syncing = false;
+let googleTokenClient = null;
+let googleConfigured = false;
+let googleReady = false;
+let googleConnected = false;
 
 const viewTitles = {
   today: "Hi Michael",
@@ -54,6 +62,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   wireForms();
   renderAll();
   await initializeSupabase();
+  await initializeGoogleCalendar();
 });
 
 function loadState() {
@@ -130,6 +139,153 @@ function updateCloudStatus(text, status) {
   badge.setAttribute("aria-label", text);
   badge.classList.remove("online", "standby", "offline");
   badge.classList.add(status);
+}
+
+async function initializeGoogleCalendar() {
+  const config = window.SECRETARY_CONFIG || {};
+  googleConfigured = Boolean(config.GOOGLE_API_KEY && config.GOOGLE_CLIENT_ID);
+  renderCalendarState();
+
+  if (!googleConfigured) return;
+
+  try {
+    await Promise.all([
+      loadScript(GOOGLE_API_SCRIPT),
+      loadScript(GOOGLE_IDENTITY_SCRIPT)
+    ]);
+
+    await new Promise((resolve, reject) => {
+      window.gapi.load("client", {
+        callback: resolve,
+        onerror: reject
+      });
+    });
+
+    await window.gapi.client.init({
+      apiKey: config.GOOGLE_API_KEY,
+      discoveryDocs: [GOOGLE_DISCOVERY_DOC]
+    });
+
+    googleTokenClient = window.google.accounts.oauth2.initTokenClient({
+      client_id: config.GOOGLE_CLIENT_ID,
+      scope: GOOGLE_CALENDAR_SCOPE,
+      callback: ""
+    });
+
+    googleReady = true;
+    renderCalendarState();
+  } catch (error) {
+    googleReady = false;
+    googleConnected = false;
+    renderCalendarState("Calendar unavailable");
+    console.warn(error);
+  }
+}
+
+function renderCalendarState(customLabel) {
+  const stateLabel = document.getElementById("calendarState");
+  const connectButton = document.getElementById("connectCalendar");
+  const refreshButton = document.getElementById("refreshCalendar");
+  if (!stateLabel || !connectButton || !refreshButton) return;
+
+  stateLabel.classList.remove("connected", "needs-setup");
+
+  if (customLabel) {
+    stateLabel.textContent = customLabel;
+    stateLabel.classList.add("needs-setup");
+    connectButton.classList.add("hidden");
+    refreshButton.classList.add("hidden");
+    return;
+  }
+
+  if (!googleConfigured) {
+    stateLabel.textContent = "Setup needed";
+    stateLabel.classList.add("needs-setup");
+    connectButton.classList.add("hidden");
+    refreshButton.classList.add("hidden");
+    return;
+  }
+
+  if (!googleReady) {
+    stateLabel.textContent = "Loading";
+    connectButton.classList.add("hidden");
+    refreshButton.classList.add("hidden");
+    return;
+  }
+
+  if (!googleConnected) {
+    stateLabel.textContent = "Not connected";
+    stateLabel.classList.add("needs-setup");
+    connectButton.classList.remove("hidden");
+    refreshButton.classList.add("hidden");
+    return;
+  }
+
+  stateLabel.textContent = "Google";
+  stateLabel.classList.add("connected");
+  connectButton.classList.add("hidden");
+  refreshButton.classList.remove("hidden");
+}
+
+async function connectGoogleCalendar() {
+  if (!googleReady || !googleTokenClient) return;
+
+  googleTokenClient.callback = async (response) => {
+    if (response.error) {
+      renderCalendarState("Calendar error");
+      return;
+    }
+    googleConnected = true;
+    renderCalendarState();
+    await loadTodayCalendarEvents();
+  };
+
+  const prompt = window.gapi.client.getToken() ? "" : "consent";
+  googleTokenClient.requestAccessToken({ prompt });
+}
+
+async function loadTodayCalendarEvents() {
+  if (!googleConnected) return;
+
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 1);
+
+  try {
+    const response = await window.gapi.client.calendar.events.list({
+      calendarId: "primary",
+      timeMin: start.toISOString(),
+      timeMax: end.toISOString(),
+      showDeleted: false,
+      singleEvents: true,
+      orderBy: "startTime"
+    });
+
+    const events = response.result.items || [];
+    state.schedule = events.map(fromGoogleCalendarEvent);
+    if (!state.schedule.length) {
+      state.schedule = [
+        { id: "google-empty", time: "Today", title: "No Google Calendar events today", location: "Google Calendar" }
+      ];
+    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    renderAll();
+  } catch (error) {
+    renderCalendarState("Calendar error");
+    console.warn(error);
+  }
+}
+
+function fromGoogleCalendarEvent(event) {
+  const startValue = event.start?.dateTime || event.start?.date;
+  const isAllDay = Boolean(event.start?.date);
+  return {
+    id: event.id,
+    time: isAllDay ? "All day" : new Date(startValue).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    title: event.summary || "Untitled event",
+    location: event.location || event.hangoutLink || "Google Calendar"
+  };
 }
 
 async function loadCloudData() {
@@ -375,6 +531,8 @@ function wireForms() {
 
   document.getElementById("generateBriefing").addEventListener("click", renderBriefing);
   document.getElementById("studentSearch").addEventListener("input", renderStudents);
+  document.getElementById("connectCalendar").addEventListener("click", connectGoogleCalendar);
+  document.getElementById("refreshCalendar").addEventListener("click", loadTodayCalendarEvents);
 }
 
 function showView(viewId) {

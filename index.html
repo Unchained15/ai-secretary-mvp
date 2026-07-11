@@ -56,8 +56,15 @@
           <div class="dashboard-grid">
             <section class="panel">
               <div class="panel-header">
-                <h2>Schedule</h2>
-                <span id="nextEventLabel">Next up</span>
+                <div>
+                  <h2>Schedule</h2>
+                  <span id="nextEventLabel">Next up</span>
+                </div>
+                <div class="panel-actions">
+                  <span class="calendar-state" id="calendarState">Sample</span>
+                  <button class="secondary-button compact-button hidden" id="connectCalendar">Connect Calendar</button>
+                  <button class="secondary-button compact-button hidden" id="refreshCalendar">Refresh</button>
+                </div>
               </div>
               <div class="timeline" id="scheduleList"></div>
             </section>
