@@ -193,7 +193,8 @@ function renderCalendarState(customLabel) {
   if (customLabel) {
     stateLabel.textContent = customLabel;
     stateLabel.classList.add("needs-setup");
-    connectButton.classList.add("hidden");
+    connectButton.classList.remove("hidden");
+    connectButton.disabled = true;
     refreshButton.classList.add("hidden");
     return;
   }
@@ -201,14 +202,16 @@ function renderCalendarState(customLabel) {
   if (!googleConfigured) {
     stateLabel.textContent = "Setup needed";
     stateLabel.classList.add("needs-setup");
-    connectButton.classList.add("hidden");
+    connectButton.classList.remove("hidden");
+    connectButton.disabled = true;
     refreshButton.classList.add("hidden");
     return;
   }
 
   if (!googleReady) {
     stateLabel.textContent = "Loading";
-    connectButton.classList.add("hidden");
+    connectButton.classList.remove("hidden");
+    connectButton.disabled = true;
     refreshButton.classList.add("hidden");
     return;
   }
@@ -217,6 +220,7 @@ function renderCalendarState(customLabel) {
     stateLabel.textContent = "Not connected";
     stateLabel.classList.add("needs-setup");
     connectButton.classList.remove("hidden");
+    connectButton.disabled = false;
     refreshButton.classList.add("hidden");
     return;
   }
@@ -224,7 +228,9 @@ function renderCalendarState(customLabel) {
   stateLabel.textContent = "Google";
   stateLabel.classList.add("connected");
   connectButton.classList.add("hidden");
+  connectButton.disabled = false;
   refreshButton.classList.remove("hidden");
+  refreshButton.disabled = false;
 }
 
 async function connectGoogleCalendar() {
