@@ -893,8 +893,60 @@ function renderStudents() {
     return;
   }
 
-  students
-    .forEach((student) => grid.appendChild(studentCard(student)));
+  const gradeGroups = groupStudents(students, (student) => student.grade || "No grade");
+  [...gradeGroups.entries()]
+    .sort(([gradeA], [gradeB]) => compareGroupLabel(gradeA, gradeB))
+    .forEach(([grade, gradeStudents]) => {
+      const gradeSection = elementFromHTML(`
+        <details class="student-grade" open>
+          <summary>
+            <span>${escapeHTML(grade)}</span>
+            <strong>${gradeStudents.length}</strong>
+          </summary>
+          <div class="student-class-list"></div>
+        </details>
+      `);
+
+      const classList = gradeSection.querySelector(".student-class-list");
+      const classGroups = groupStudents(gradeStudents, (student) => student.className || "No class");
+      [...classGroups.entries()]
+        .sort(([classA], [classB]) => compareGroupLabel(classA, classB))
+        .forEach(([className, classStudents]) => {
+          const classSection = elementFromHTML(`
+            <section class="student-class">
+              <div class="student-class-header">
+                <h3>${escapeHTML(className)}</h3>
+                <span>${classStudents.length} student${classStudents.length === 1 ? "" : "s"}</span>
+              </div>
+              <div class="student-class-rows"></div>
+            </section>
+          `);
+
+          const rows = classSection.querySelector(".student-class-rows");
+          classStudents
+            .sort((a, b) => a.name.localeCompare(b.name))
+            .forEach((student) => rows.appendChild(studentCard(student)));
+          classList.appendChild(classSection);
+        });
+
+      grid.appendChild(gradeSection);
+    });
+}
+
+function groupStudents(students, getKey) {
+  return students.reduce((groups, student) => {
+    const key = getKey(student);
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(student);
+    return groups;
+  }, new Map());
+}
+
+function compareGroupLabel(a, b) {
+  const aNumber = Number(String(a).match(/\d+/)?.[0] || Number.POSITIVE_INFINITY);
+  const bNumber = Number(String(b).match(/\d+/)?.[0] || Number.POSITIVE_INFINITY);
+  if (aNumber !== bNumber) return aNumber - bNumber;
+  return String(a).localeCompare(String(b));
 }
 
 function renderStudentOptions() {

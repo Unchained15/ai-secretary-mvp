@@ -540,6 +540,85 @@ textarea {
 
 .student-grid {
   grid-template-columns: 1fr;
+  gap: 16px;
+}
+
+.student-grade {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.student-grade summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 48px;
+  padding: 0 16px;
+  color: var(--ink);
+  background: #f4faf7;
+  font-weight: 800;
+  list-style: none;
+  cursor: pointer;
+}
+
+.student-grade summary::-webkit-details-marker {
+  display: none;
+}
+
+.student-grade summary::before {
+  content: "▾";
+  margin-right: 8px;
+  color: var(--accent-dark);
+  font-size: 0.8rem;
+}
+
+.student-grade:not([open]) summary::before {
+  content: "▸";
+}
+
+.student-grade summary span {
+  flex: 1;
+}
+
+.student-grade summary strong {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.student-class-list {
+  display: grid;
+  gap: 0;
+}
+
+.student-class {
+  border-top: 1px solid var(--line);
+}
+
+.student-class-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  background: #ffffff;
+}
+
+.student-class-header h3 {
+  margin: 0;
+  font-size: 0.92rem;
+}
+
+.student-class-header span {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.student-class-rows {
+  display: grid;
 }
 
 .student-card {
@@ -548,9 +627,14 @@ textarea {
   gap: 16px;
   align-items: center;
   padding: 14px 16px;
+  border-width: 1px 0 0;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .student-strip .student-card {
+  border-width: 1px;
+  border-radius: 8px;
   grid-template-columns: 1fr;
   align-items: start;
 }
