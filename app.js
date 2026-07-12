@@ -359,8 +359,10 @@ async function importStudentsFromSheet() {
       renderAll();
 
       const label = document.getElementById("studentSyncState");
-      label.textContent = `${imported.length} imported`;
-      label.classList.add("connected");
+      const nonEmptyCount = rows.filter((row) => row.some((value) => String(value || "").trim())).length;
+      label.textContent = imported.length ? `${imported.length} imported` : `0 imported (${nonEmptyCount} rows read)`;
+      label.classList.toggle("connected", imported.length > 0);
+      label.classList.toggle("needs-setup", imported.length === 0);
     } catch (error) {
       renderStudentSyncState("Sheet error");
       console.warn(error);
@@ -373,15 +375,16 @@ function parseStudentSheetRows(rows) {
   const nonEmptyRows = rows.filter((row) => row.some((value) => String(value || "").trim()));
   if (!nonEmptyRows.length) return [];
 
-  const headers = nonEmptyRows[0].map((value) => String(value).trim().toLowerCase());
+  const headerInfo = findStudentHeaderRow(nonEmptyRows);
+  const headers = headerInfo ? headerInfo.headers : [];
   const nameIndex = findHeaderIndex(headers, ["name", "student", "student name", "student's name", "students name"]);
   const classIndex = findHeaderIndex(headers, ["class", "homeroom", "section"]);
   const gradeIndex = findHeaderIndex(headers, ["grade", "year", "level"]);
   const parentNameIndex = findHeaderIndex(headers, ["parents name", "parent name", "guardian name"]);
   const parentEmailIndex = findHeaderIndex(headers, ["parents email", "parent email", "guardian email"]);
   const emailIndex = findHeaderIndex(headers, ["student email", "student e-mail", "email", "e-mail", "mail"]);
-  const hasHeader = nameIndex >= 0;
-  const dataRows = hasHeader ? nonEmptyRows.slice(1) : nonEmptyRows;
+  const hasHeader = Boolean(headerInfo) && nameIndex >= 0;
+  const dataRows = hasHeader ? nonEmptyRows.slice(headerInfo.index + 1) : nonEmptyRows;
 
   return dataRows
     .map((row) => {
@@ -410,8 +413,21 @@ function parseStudentSheetRows(rows) {
     .filter((student) => student.name);
 }
 
+function findStudentHeaderRow(rows) {
+  const scanLimit = Math.min(rows.length, 20);
+  for (let index = 0; index < scanLimit; index += 1) {
+    const headers = rows[index].map((value) => normalizeHeader(value));
+    const hasName = findHeaderIndex(headers, ["name", "student", "student name", "student's name", "students name"]) >= 0;
+    const hasClassOrGrade = findHeaderIndex(headers, ["class", "homeroom", "section", "grade", "year", "level"]) >= 0;
+    if (hasName && hasClassOrGrade) {
+      return { index, headers };
+    }
+  }
+  return null;
+}
+
 function findHeaderIndex(headers, candidates) {
-  return headers.findIndex((header) => candidates.includes(header));
+  return headers.findIndex((header) => candidates.includes(normalizeHeader(header)));
 }
 
 function mergeImportedStudents(imported) {
@@ -1007,6 +1023,13 @@ function findMentionedStudent(text) {
 
 function normalizeText(value) {
   return String(value || "").trim().toLowerCase();
+}
+
+function normalizeHeader(value) {
+  return normalizeText(value)
+    .replaceAll("’", "'")
+    .replaceAll("`", "'")
+    .replace(/\s+/g, " ");
 }
 
 async function toggleTask(id) {
