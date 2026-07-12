@@ -23,17 +23,11 @@ const seedData = {
   schedule: [
     { id: crypto.randomUUID(), time: "08:00", title: "DP Psychology Year 1", location: "Room 204" },
     { id: crypto.randomUUID(), time: "10:00", title: "Student university check-in", location: "Counselling Office" },
-    { id: crypto.randomUUID(), time: "14:00", title: "Meet parent of Student A", location: "Conference Room" },
+    { id: crypto.randomUUID(), time: "14:00", title: "Parent consultation", location: "Conference Room" },
     { id: crypto.randomUUID(), time: "15:30", title: "Admin block", location: "Desk" }
   ],
-  students: [
-    { id: crypto.randomUUID(), name: "Student A", className: "12A", grade: "Grade 12", parentName: "Parent A", parentEmail: "parent.a@example.com", email: "student.a@school.edu", goal: "Mechanical Engineering in Australia", nextAction: "Send shortlist of Australian universities", deadline: isoToday, notes: "Parent meeting at 2 PM. Interested in practical engineering programs." },
-    { id: crypto.randomUUID(), name: "Student B", className: "12B", grade: "Grade 12", parentName: "Parent B", parentEmail: "parent.b@example.com", email: "student.b@school.edu", goal: "Medicine in the UK", nextAction: "Check IELTS and predicted grade requirements", deadline: toISODate(tomorrow), notes: "Needs early UCAS planning and interview preparation." },
-    { id: crypto.randomUUID(), name: "Student C", className: "11A", grade: "Grade 11", parentName: "Parent C", parentEmail: "parent.c@example.com", email: "student.c@school.edu", goal: "Gap year before university", nextAction: "Discuss structured volunteering options", deadline: toISODate(addDays(today, 3)), notes: "Family wants a plan with clear learning outcomes." }
-  ],
-  notes: [
-    { id: crypto.randomUUID(), type: "Meeting", text: "Student A wants Mechanical Engineering in Australia. Next step: send a shortlist and check application deadlines.", createdAt: new Date().toISOString() }
-  ],
+  students: [],
+  notes: [],
   assistant: [
     { role: "assistant", text: "Hi Michael. Ask me what you need to do today, or tell me to add a task, student follow-up, or note." }
   ]
@@ -354,7 +348,15 @@ async function importStudentsFromSheet() {
 
       const rows = response.result.values || [];
       const imported = parseStudentSheetRows(rows);
+      const removedBeforeImport = cleanupStudentRecords();
+      if (removedBeforeImport.length) {
+        await deleteCloudStudents(removedBeforeImport);
+      }
       mergeImportedStudents(imported);
+      const removedAfterImport = cleanupStudentRecords();
+      if (removedAfterImport.length) {
+        await deleteCloudStudents(removedAfterImport);
+      }
       await saveState();
       renderAll();
 
@@ -410,6 +412,7 @@ function parseStudentSheetRows(rows) {
     })
     .filter((student) => normalizeText(student.name) !== "student's name")
     .filter((student) => normalizeText(student.name) !== "student name")
+    .filter((student) => !isInvalidStudentRecord(student))
     .filter((student) => student.name);
 }
 
@@ -465,6 +468,42 @@ function mergeImportedStudents(imported) {
   });
 }
 
+function cleanupStudentRecords() {
+  const invalidIds = new Set();
+  state.students = state.students.filter((student) => {
+    const invalid = isInvalidStudentRecord(student);
+    if (invalid) invalidIds.add(student.id);
+    return !invalid;
+  });
+
+  if (invalidIds.size) {
+    state.notes = state.notes.map((note) => invalidIds.has(note.studentId) ? { ...note, studentId: "" } : note);
+  }
+  return [...invalidIds];
+}
+
+async function deleteCloudStudents(studentIds) {
+  if (!supabaseClient || !currentUser || !studentIds.length) return;
+  await supabaseClient.from("students").delete().in("id", studentIds);
+}
+
+function isInvalidStudentRecord(student) {
+  const name = normalizeHeader(student.name);
+  const email = normalizeText(student.email);
+  const demoNames = ["student a", "student b", "student c"];
+  const demoEmails = ["student.a@school.edu", "student.b@school.edu", "student.c@school.edu"];
+  const headerNames = ["name", "student", "student name", "student's name", "students name"];
+  const titleFragments = ["all students", "student list", "2627"];
+
+  if (!name) return true;
+  if (demoNames.includes(name) || demoEmails.includes(email)) return true;
+  if (headerNames.includes(name)) return true;
+  if (titleFragments.some((fragment) => name.includes(fragment))) return true;
+
+  const hasRealDetails = [student.className, student.grade, student.parentName, student.parentEmail, student.email].some((value) => normalizeText(value));
+  return student.source === "google-sheet" && !hasRealDetails;
+}
+
 async function loadCloudData() {
   if (!supabaseClient || !currentUser) return;
 
@@ -496,6 +535,10 @@ async function loadCloudData() {
     students: studentsResult.data.map(fromCloudStudent),
     notes: notesResult.data.map(fromCloudNote)
   };
+  const removedStudentIds = cleanupStudentRecords();
+  if (removedStudentIds.length) {
+    await deleteCloudStudents(removedStudentIds);
+  }
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   renderAll();
 }
@@ -599,6 +642,7 @@ function fromCloudNote(row) {
 }
 
 function renderAll() {
+  cleanupStudentRecords();
   document.getElementById("todayDate").textContent = new Intl.DateTimeFormat("en", {
     weekday: "long",
     month: "long",
@@ -834,8 +878,22 @@ function renderStudents() {
   const query = document.getElementById("studentSearch").value.trim().toLowerCase();
   const grid = document.getElementById("studentGrid");
   grid.innerHTML = "";
-  state.students
+
+  const students = state.students
     .filter((student) => [student.name, student.className, student.grade, student.parentName, student.parentEmail, student.email, student.goal, student.nextAction, student.notes].join(" ").toLowerCase().includes(query))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  if (!students.length) {
+    grid.appendChild(elementFromHTML(`
+      <article class="empty-state">
+        <strong>No students yet</strong>
+        <span>Import your Google Sheet to fill this list.</span>
+      </article>
+    `));
+    return;
+  }
+
+  students
     .forEach((student) => grid.appendChild(studentCard(student)));
 }
 
@@ -907,16 +965,16 @@ function taskCard(task) {
 function studentCard(student) {
   return elementFromHTML(`
     <article class="student-card">
-      <h3>${escapeHTML(student.name)}</h3>
-      <p>${escapeHTML(student.goal || student.email || "No counselling goal added yet.")}</p>
-      <div class="student-meta">
-        ${student.className ? `<span class="pill">${escapeHTML(student.className)}</span>` : ""}
-        ${student.grade ? `<span class="pill">${escapeHTML(student.grade)}</span>` : ""}
-        ${student.parentName ? `<span class="pill">${escapeHTML(student.parentName)}</span>` : ""}
-        ${student.parentEmail ? `<span class="pill">${escapeHTML(student.parentEmail)}</span>` : ""}
-        ${student.email ? `<span class="pill">${escapeHTML(student.email)}</span>` : ""}
-        ${student.nextAction ? `<span class="pill">${escapeHTML(student.nextAction)}</span>` : ""}
-        ${student.deadline ? `<span class="pill">${formatDate(student.deadline)}</span>` : ""}
+      <div class="student-main">
+        <h3>${escapeHTML(student.name)}</h3>
+        <span>${escapeHTML([student.grade, student.className].filter(Boolean).join(" / ") || "No class details")}</span>
+      </div>
+      <div class="student-contact">
+        <span>${escapeHTML(student.email || "No student email")}</span>
+        <span>${escapeHTML([student.parentName, student.parentEmail].filter(Boolean).join(" - ") || "No parent contact")}</span>
+      </div>
+      <div class="student-action">
+        <span>${escapeHTML(student.nextAction || student.goal || "No follow-up yet")}</span>
       </div>
     </article>
   `);

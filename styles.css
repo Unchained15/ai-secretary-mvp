@@ -143,6 +143,7 @@ button:disabled {
 
 .quick-actions,
 .toolbar,
+.toolbar-actions,
 .form-row,
 menu {
   display: flex;
@@ -437,18 +438,15 @@ h2 {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
-.student-card,
 .note-card {
   padding: 15px;
 }
 
-.student-card h3,
 .note-card h3 {
   margin: 0 0 7px;
   font-size: 1rem;
 }
 
-.student-card p,
 .note-card p {
   margin: 0 0 12px;
   color: var(--muted);
@@ -458,6 +456,11 @@ h2 {
 .toolbar {
   justify-content: space-between;
   margin-bottom: 14px;
+}
+
+.toolbar-actions {
+  justify-content: flex-end;
+  flex-wrap: wrap;
 }
 
 .segmented {
@@ -536,7 +539,67 @@ textarea {
 }
 
 .student-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: 1fr;
+}
+
+.student-card {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.1fr) minmax(260px, 1.6fr) minmax(180px, 1fr);
+  gap: 16px;
+  align-items: center;
+  padding: 14px 16px;
+}
+
+.student-strip .student-card {
+  grid-template-columns: 1fr;
+  align-items: start;
+}
+
+.student-strip .student-action {
+  justify-items: start;
+  text-align: left;
+}
+
+.student-main,
+.student-contact,
+.student-action {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.student-main h3 {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 1rem;
+}
+
+.student-main span,
+.student-contact span,
+.student-action span {
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.35;
+}
+
+.student-action {
+  justify-items: end;
+  text-align: right;
+}
+
+.empty-state {
+  display: grid;
+  gap: 4px;
+  padding: 24px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  background: #ffffff;
+}
+
+.empty-state strong {
+  color: var(--ink);
 }
 
 .note-composer {
@@ -693,6 +756,16 @@ menu {
   .student-strip,
   .student-grid {
     grid-template-columns: 1fr;
+  }
+
+  .student-card {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .student-action {
+    justify-items: start;
+    text-align: left;
   }
 
   .assistant-box {
