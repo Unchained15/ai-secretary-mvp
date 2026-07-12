@@ -736,7 +736,16 @@ function wireForms() {
   const authDialog = document.getElementById("authDialog");
 
   document.getElementById("quickAddTask").addEventListener("click", openTaskDialog);
-  document.getElementById("addTaskFromTasks").addEventListener("click", openTaskDialog);
+  document.querySelectorAll("[data-close-dialog]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const dialog = button.closest("dialog");
+      const form = button.closest("form");
+      if (form) form.reset();
+      if (dialog) dialog.close();
+      deadlineTaskId = "";
+      renderFollowUpOptions();
+    });
+  });
   document.getElementById("signInButton").addEventListener("click", () => authDialog.showModal());
   document.getElementById("signOutButton").addEventListener("click", async () => {
     if (supabaseClient) await supabaseClient.auth.signOut();

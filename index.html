@@ -95,7 +95,6 @@
               <button class="segment" data-filter="overdue">Overdue</button>
               <button class="segment" data-filter="done">Done</button>
             </div>
-            <button class="primary-button" id="addTaskFromTasks">+ Task</button>
           </div>
           <div class="table-wrap">
             <table>
@@ -212,7 +211,7 @@
           <input id="taskDue" type="date" required />
         </label>
         <menu>
-          <button class="secondary-button" value="cancel">Cancel</button>
+          <button class="secondary-button" type="button" data-close-dialog>Cancel</button>
           <button class="primary-button" id="saveTask" value="default">Save</button>
         </menu>
       </form>
@@ -227,7 +226,7 @@
           <input id="deadlineDate" type="date" required />
         </label>
         <menu>
-          <button class="secondary-button" value="cancel">Cancel</button>
+          <button class="secondary-button" type="button" data-close-dialog>Cancel</button>
           <button class="primary-button" value="default">Save</button>
         </menu>
       </form>
@@ -277,7 +276,7 @@
           <input id="studentDeadline" type="date" required />
         </label>
         <menu>
-          <button class="secondary-button" value="cancel">Cancel</button>
+          <button class="secondary-button" type="button" data-close-dialog>Cancel</button>
           <button class="primary-button" id="saveStudent" value="default">Save</button>
         </menu>
       </form>
@@ -298,7 +297,7 @@
         </label>
         <p class="muted" id="authMessage"></p>
         <menu>
-          <button class="secondary-button" value="cancel">Cancel</button>
+          <button class="secondary-button" type="button" data-close-dialog>Cancel</button>
           <button class="primary-button" id="sendMagicLink" value="default">Send Link</button>
         </menu>
       </form>
