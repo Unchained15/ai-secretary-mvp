@@ -2,8 +2,9 @@ const STORAGE_KEY = "school-secretary-ai-mvp";
 const SUPABASE_SCRIPT = "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2";
 const GOOGLE_API_SCRIPT = "https://apis.google.com/js/api.js";
 const GOOGLE_IDENTITY_SCRIPT = "https://accounts.google.com/gsi/client";
-const GOOGLE_DISCOVERY_DOC = "https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest";
-const GOOGLE_CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.readonly";
+const GOOGLE_CALENDAR_DISCOVERY_DOC = "https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest";
+const GOOGLE_SHEETS_DISCOVERY_DOC = "https://sheets.googleapis.com/$discovery/rest?version=v4";
+const GOOGLE_SCOPES = "https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/spreadsheets.readonly";
 
 const today = new Date();
 const isoToday = toISODate(today);
@@ -26,9 +27,9 @@ const seedData = {
     { id: crypto.randomUUID(), time: "15:30", title: "Admin block", location: "Desk" }
   ],
   students: [
-    { id: crypto.randomUUID(), name: "Student A", goal: "Mechanical Engineering in Australia", nextAction: "Send shortlist of Australian universities", deadline: isoToday, notes: "Parent meeting at 2 PM. Interested in practical engineering programs." },
-    { id: crypto.randomUUID(), name: "Student B", goal: "Medicine in the UK", nextAction: "Check IELTS and predicted grade requirements", deadline: toISODate(tomorrow), notes: "Needs early UCAS planning and interview preparation." },
-    { id: crypto.randomUUID(), name: "Student C", goal: "Gap year before university", nextAction: "Discuss structured volunteering options", deadline: toISODate(addDays(today, 3)), notes: "Family wants a plan with clear learning outcomes." }
+    { id: crypto.randomUUID(), name: "Student A", className: "12A", grade: "Grade 12", parentName: "Parent A", parentEmail: "parent.a@example.com", email: "student.a@school.edu", goal: "Mechanical Engineering in Australia", nextAction: "Send shortlist of Australian universities", deadline: isoToday, notes: "Parent meeting at 2 PM. Interested in practical engineering programs." },
+    { id: crypto.randomUUID(), name: "Student B", className: "12B", grade: "Grade 12", parentName: "Parent B", parentEmail: "parent.b@example.com", email: "student.b@school.edu", goal: "Medicine in the UK", nextAction: "Check IELTS and predicted grade requirements", deadline: toISODate(tomorrow), notes: "Needs early UCAS planning and interview preparation." },
+    { id: crypto.randomUUID(), name: "Student C", className: "11A", grade: "Grade 11", parentName: "Parent C", parentEmail: "parent.c@example.com", email: "student.c@school.edu", goal: "Gap year before university", nextAction: "Discuss structured volunteering options", deadline: toISODate(addDays(today, 3)), notes: "Family wants a plan with clear learning outcomes." }
   ],
   notes: [
     { id: crypto.randomUUID(), type: "Meeting", text: "Student A wants Mechanical Engineering in Australia. Next step: send a shortlist and check application deadlines.", createdAt: new Date().toISOString() }
@@ -145,6 +146,7 @@ async function initializeGoogleCalendar() {
   const config = window.SECRETARY_CONFIG || {};
   googleConfigured = Boolean(config.GOOGLE_API_KEY && config.GOOGLE_CLIENT_ID);
   renderCalendarState();
+  renderStudentSyncState();
 
   if (!googleConfigured) return;
 
@@ -163,23 +165,59 @@ async function initializeGoogleCalendar() {
 
     await window.gapi.client.init({
       apiKey: config.GOOGLE_API_KEY,
-      discoveryDocs: [GOOGLE_DISCOVERY_DOC]
+      discoveryDocs: [GOOGLE_CALENDAR_DISCOVERY_DOC, GOOGLE_SHEETS_DISCOVERY_DOC]
     });
 
     googleTokenClient = window.google.accounts.oauth2.initTokenClient({
       client_id: config.GOOGLE_CLIENT_ID,
-      scope: GOOGLE_CALENDAR_SCOPE,
+      scope: GOOGLE_SCOPES,
       callback: ""
     });
 
     googleReady = true;
     renderCalendarState();
+    renderStudentSyncState();
   } catch (error) {
     googleReady = false;
     googleConnected = false;
     renderCalendarState("Calendar unavailable");
+    renderStudentSyncState("Sheets unavailable");
     console.warn(error);
   }
+}
+
+function renderStudentSyncState(customLabel) {
+  const label = document.getElementById("studentSyncState");
+  const button = document.getElementById("importStudents");
+  if (!label || !button) return;
+
+  const config = window.SECRETARY_CONFIG || {};
+  const hasSheet = Boolean(config.STUDENT_SHEET_ID && config.STUDENT_SHEET_RANGE);
+  label.classList.remove("connected", "needs-setup");
+
+  if (customLabel) {
+    label.textContent = customLabel;
+    label.classList.add("needs-setup");
+    button.disabled = true;
+    return;
+  }
+
+  if (!hasSheet) {
+    label.textContent = "Sheet not set";
+    label.classList.add("needs-setup");
+    button.disabled = true;
+    return;
+  }
+
+  if (!googleReady) {
+    label.textContent = "Loading";
+    button.disabled = true;
+    return;
+  }
+
+  label.textContent = "Sheet ready";
+  label.classList.add("connected");
+  button.disabled = false;
 }
 
 function renderCalendarState(customLabel) {
@@ -234,16 +272,22 @@ function renderCalendarState(customLabel) {
 }
 
 async function connectGoogleCalendar() {
+  await requestGoogleAccess(loadTodayCalendarEvents, "Calendar error");
+}
+
+async function requestGoogleAccess(afterAccess, errorLabel) {
   if (!googleReady || !googleTokenClient) return;
 
   googleTokenClient.callback = async (response) => {
     if (response.error) {
-      renderCalendarState("Calendar error");
+      renderCalendarState(errorLabel);
+      renderStudentSyncState(errorLabel);
       return;
     }
     googleConnected = true;
     renderCalendarState();
-    await loadTodayCalendarEvents();
+    renderStudentSyncState();
+    await afterAccess();
   };
 
   const prompt = window.gapi.client.getToken() ? "" : "consent";
@@ -292,6 +336,97 @@ function fromGoogleCalendarEvent(event) {
     title: event.summary || "Untitled event",
     location: event.location || event.hangoutLink || "Google Calendar"
   };
+}
+
+async function importStudentsFromSheet() {
+  const config = window.SECRETARY_CONFIG || {};
+  if (!config.STUDENT_SHEET_ID || !config.STUDENT_SHEET_RANGE) {
+    renderStudentSyncState("Sheet not set");
+    return;
+  }
+
+  await requestGoogleAccess(async () => {
+    try {
+      const response = await window.gapi.client.sheets.spreadsheets.values.get({
+        spreadsheetId: config.STUDENT_SHEET_ID,
+        range: config.STUDENT_SHEET_RANGE
+      });
+
+      const rows = response.result.values || [];
+      const imported = parseStudentSheetRows(rows);
+      mergeImportedStudents(imported);
+      await saveState();
+      renderAll();
+
+      const label = document.getElementById("studentSyncState");
+      label.textContent = `${imported.length} imported`;
+      label.classList.add("connected");
+    } catch (error) {
+      renderStudentSyncState("Sheet error");
+      console.warn(error);
+    }
+  }, "Sheet error");
+}
+
+function parseStudentSheetRows(rows) {
+  if (!rows.length) return [];
+  const headers = rows[0].map((value) => String(value).trim().toLowerCase());
+  const nameIndex = findHeaderIndex(headers, ["name", "student", "student name", "student's name", "students name"]);
+  const classIndex = findHeaderIndex(headers, ["class", "homeroom", "section"]);
+  const gradeIndex = findHeaderIndex(headers, ["grade", "year", "level"]);
+  const parentNameIndex = findHeaderIndex(headers, ["parents name", "parent name", "guardian name"]);
+  const parentEmailIndex = findHeaderIndex(headers, ["parents email", "parent email", "guardian email"]);
+  const emailIndex = findHeaderIndex(headers, ["student email", "student e-mail", "email", "e-mail", "mail"]);
+
+  return rows.slice(1)
+    .map((row) => ({
+      name: String(row[nameIndex] || "").trim(),
+      className: classIndex >= 0 ? String(row[classIndex] || "").trim() : "",
+      grade: gradeIndex >= 0 ? String(row[gradeIndex] || "").trim() : "",
+      parentName: parentNameIndex >= 0 ? String(row[parentNameIndex] || "").trim() : "",
+      parentEmail: parentEmailIndex >= 0 ? String(row[parentEmailIndex] || "").trim() : "",
+      email: emailIndex >= 0 ? String(row[emailIndex] || "").trim() : ""
+    }))
+    .filter((student) => student.name);
+}
+
+function findHeaderIndex(headers, candidates) {
+  return headers.findIndex((header) => candidates.includes(header));
+}
+
+function mergeImportedStudents(imported) {
+  imported.forEach((student) => {
+    const existing = state.students.find((item) => {
+      const sameEmail = student.email && item.email && normalizeText(item.email) === normalizeText(student.email);
+      const sameName = normalizeText(item.name) === normalizeText(student.name);
+      return sameEmail || sameName;
+    });
+
+    if (existing) {
+      existing.name = student.name;
+      existing.className = student.className;
+      existing.grade = student.grade;
+      existing.parentName = student.parentName;
+      existing.parentEmail = student.parentEmail;
+      existing.email = student.email;
+      existing.source = "google-sheet";
+    } else {
+      state.students.push({
+        id: crypto.randomUUID(),
+        name: student.name,
+        className: student.className,
+        grade: student.grade,
+        parentName: student.parentName,
+        parentEmail: student.parentEmail,
+        email: student.email,
+        goal: "",
+        nextAction: "",
+        deadline: isoToday,
+        notes: "",
+        source: "google-sheet"
+      });
+    }
+  });
 }
 
 async function loadCloudData() {
@@ -377,6 +512,11 @@ function toCloudStudent(student) {
     id: student.id,
     owner_id: currentUser.id,
     display_name: student.name,
+    class_name: student.className || "",
+    grade: student.grade || "",
+    parent_name: student.parentName || "",
+    parent_email: student.parentEmail || "",
+    email: student.email || "",
     goal: student.goal,
     next_action: student.nextAction,
     deadline: student.deadline,
@@ -389,6 +529,11 @@ function fromCloudStudent(row) {
   return {
     id: row.id,
     name: row.display_name,
+    className: row.class_name || "",
+    grade: row.grade || "",
+    parentName: row.parent_name || "",
+    parentEmail: row.parent_email || "",
+    email: row.email || "",
     goal: row.goal || "",
     nextAction: row.next_action || "",
     deadline: row.deadline || isoToday,
@@ -400,6 +545,7 @@ function toCloudNote(note) {
   return {
     id: note.id,
     owner_id: currentUser.id,
+    student_id: note.studentId || null,
     note_type: note.type,
     body: note.text,
     created_at: note.createdAt
@@ -409,6 +555,7 @@ function toCloudNote(note) {
 function fromCloudNote(row) {
   return {
     id: row.id,
+    studentId: row.student_id || "",
     type: row.note_type,
     text: row.body,
     createdAt: row.created_at
@@ -427,6 +574,7 @@ function renderAll() {
   renderFollowups();
   renderTasks();
   renderStudents();
+  renderStudentOptions();
   renderNotes();
   renderAssistant();
   renderCounts();
@@ -526,6 +674,11 @@ function wireForms() {
     state.students.push({
       id: crypto.randomUUID(),
       name: document.getElementById("studentName").value.trim(),
+      className: document.getElementById("studentClass").value.trim(),
+      grade: document.getElementById("studentGrade").value.trim(),
+      parentName: document.getElementById("studentParentName").value.trim(),
+      parentEmail: document.getElementById("studentParentEmail").value.trim(),
+      email: document.getElementById("studentEmail").value.trim(),
       goal: document.getElementById("studentGoal").value.trim(),
       nextAction: document.getElementById("studentAction").value.trim(),
       deadline: document.getElementById("studentDeadline").value,
@@ -541,7 +694,7 @@ function wireForms() {
     event.preventDefault();
     const text = document.getElementById("noteText").value.trim();
     if (!text) return;
-    await addNote(text, document.getElementById("noteType").value);
+    await addNote(text, document.getElementById("noteType").value, true, document.getElementById("noteStudent").value);
     event.target.reset();
   });
 
@@ -558,6 +711,7 @@ function wireForms() {
   document.getElementById("studentSearch").addEventListener("input", renderStudents);
   document.getElementById("connectCalendar").addEventListener("click", connectGoogleCalendar);
   document.getElementById("refreshCalendar").addEventListener("click", loadTodayCalendarEvents);
+  document.getElementById("importStudents").addEventListener("click", importStudentsFromSheet);
 }
 
 function showView(viewId) {
@@ -645,8 +799,24 @@ function renderStudents() {
   const grid = document.getElementById("studentGrid");
   grid.innerHTML = "";
   state.students
-    .filter((student) => [student.name, student.goal, student.nextAction, student.notes].join(" ").toLowerCase().includes(query))
+    .filter((student) => [student.name, student.className, student.grade, student.parentName, student.parentEmail, student.email, student.goal, student.nextAction, student.notes].join(" ").toLowerCase().includes(query))
     .forEach((student) => grid.appendChild(studentCard(student)));
+}
+
+function renderStudentOptions() {
+  const select = document.getElementById("noteStudent");
+  if (!select) return;
+  const selected = select.value;
+  select.innerHTML = `<option value="">No student selected</option>`;
+  [...state.students]
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .forEach((student) => {
+      const option = document.createElement("option");
+      option.value = student.id;
+      option.textContent = student.name;
+      select.appendChild(option);
+    });
+  select.value = selected;
 }
 
 function renderNotes() {
@@ -655,11 +825,13 @@ function renderNotes() {
   [...state.notes]
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     .forEach((note) => {
+      const student = getStudentById(note.studentId);
       list.appendChild(elementFromHTML(`
         <article class="note-card">
-          <h3>${escapeHTML(note.type)}</h3>
+          <h3>${escapeHTML(student ? student.name : note.type)}</h3>
           <p>${escapeHTML(note.text)}</p>
           <div class="note-meta">
+            ${student ? `<span class="pill">${escapeHTML(note.type)}</span>` : ""}
             <span class="pill">${new Date(note.createdAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}</span>
           </div>
         </article>
@@ -700,10 +872,15 @@ function studentCard(student) {
   return elementFromHTML(`
     <article class="student-card">
       <h3>${escapeHTML(student.name)}</h3>
-      <p>${escapeHTML(student.goal)}</p>
+      <p>${escapeHTML(student.goal || student.email || "No counselling goal added yet.")}</p>
       <div class="student-meta">
-        <span class="pill">${escapeHTML(student.nextAction)}</span>
-        <span class="pill">${formatDate(student.deadline)}</span>
+        ${student.className ? `<span class="pill">${escapeHTML(student.className)}</span>` : ""}
+        ${student.grade ? `<span class="pill">${escapeHTML(student.grade)}</span>` : ""}
+        ${student.parentName ? `<span class="pill">${escapeHTML(student.parentName)}</span>` : ""}
+        ${student.parentEmail ? `<span class="pill">${escapeHTML(student.parentEmail)}</span>` : ""}
+        ${student.email ? `<span class="pill">${escapeHTML(student.email)}</span>` : ""}
+        ${student.nextAction ? `<span class="pill">${escapeHTML(student.nextAction)}</span>` : ""}
+        ${student.deadline ? `<span class="pill">${formatDate(student.deadline)}</span>` : ""}
       </div>
     </article>
   `);
@@ -723,10 +900,11 @@ async function handleAssistant(text) {
       text: `Done. I added "${task.title}" for ${formatDate(task.due)} with ${task.priority.toLowerCase()} priority.`
     });
   } else if (lower.includes("student") || lower.includes("follow up") || lower.includes("follow-up")) {
-    await addNote(text, "Meeting", false);
+    const student = findMentionedStudent(text);
+    await addNote(text, "Meeting", false, student?.id || "");
     state.assistant.push({
       role: "assistant",
-      text: "I saved that as a student follow-up note. In the connected version, I would also attach it to the matching student record automatically."
+      text: student ? `I saved that note under ${student.name}.` : "I saved that as a student follow-up note. Choose a student in Notes when you want to attach it manually."
     });
   } else if (lower.includes("draft email")) {
     state.assistant.push({
@@ -784,9 +962,10 @@ function parseTask(text) {
   };
 }
 
-async function addNote(text, type = "Meeting", persist = true) {
+async function addNote(text, type = "Meeting", persist = true, studentId = "") {
   state.notes.push({
     id: crypto.randomUUID(),
+    studentId,
     type,
     text,
     createdAt: new Date().toISOString()
@@ -795,6 +974,19 @@ async function addNote(text, type = "Meeting", persist = true) {
     await saveState();
     renderAll();
   }
+}
+
+function getStudentById(id) {
+  return state.students.find((student) => student.id === id);
+}
+
+function findMentionedStudent(text) {
+  const normalized = normalizeText(text);
+  return state.students.find((student) => normalized.includes(normalizeText(student.name)));
+}
+
+function normalizeText(value) {
+  return String(value || "").trim().toLowerCase();
 }
 
 async function toggleTask(id) {

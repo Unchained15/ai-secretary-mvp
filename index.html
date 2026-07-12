@@ -116,21 +116,36 @@
         <section class="view" id="students">
           <div class="toolbar">
             <input class="search-input" id="studentSearch" placeholder="Search students, goals, countries..." />
-            <button class="primary-button" id="addStudent">+ Student</button>
+            <div class="toolbar-actions">
+              <span class="calendar-state needs-setup" id="studentSyncState">Sheet not set</span>
+              <button class="secondary-button" id="importStudents">Import Sheet</button>
+              <button class="primary-button" id="addStudent">+ Student</button>
+            </div>
           </div>
           <div class="student-grid" id="studentGrid"></div>
         </section>
 
         <section class="view" id="notes">
           <form class="note-composer" id="noteForm">
+            <div class="field-grid">
+              <label>
+                Student
+                <select id="noteStudent">
+                  <option value="">No student selected</option>
+                </select>
+              </label>
+              <label>
+                Type
+                <select id="noteType">
+                  <option>Meeting</option>
+                  <option>Parent Call</option>
+                  <option>Lesson</option>
+                  <option>Admin</option>
+                </select>
+              </label>
+            </div>
             <textarea id="noteText" placeholder="Paste or dictate a meeting note. Example: Student A wants Mechanical Engineering in Australia. Follow up next Friday."></textarea>
             <div class="form-row">
-              <select id="noteType">
-                <option>Meeting</option>
-                <option>Parent Call</option>
-                <option>Lesson</option>
-                <option>Admin</option>
-              </select>
               <button class="primary-button" type="submit">Save Note</button>
             </div>
           </form>
@@ -193,13 +208,37 @@
           Name
           <input id="studentName" required />
         </label>
+        <div class="field-grid">
+          <label>
+            Class
+            <input id="studentClass" placeholder="12A" />
+          </label>
+          <label>
+            Grade
+            <input id="studentGrade" placeholder="Grade 12" />
+          </label>
+        </div>
+        <label>
+          Email
+          <input id="studentEmail" type="email" placeholder="student@school.edu" />
+        </label>
+        <div class="field-grid">
+          <label>
+            Parent Name
+            <input id="studentParentName" placeholder="Parent or guardian" />
+          </label>
+          <label>
+            Parent Email
+            <input id="studentParentEmail" type="email" placeholder="parent@school.edu" />
+          </label>
+        </div>
         <label>
           Goal
-          <input id="studentGoal" placeholder="Medicine in the UK" required />
+          <input id="studentGoal" placeholder="Medicine in the UK" />
         </label>
         <label>
           Next action
-          <input id="studentAction" placeholder="Check IELTS requirement" required />
+          <input id="studentAction" placeholder="Check IELTS requirement" />
         </label>
         <label>
           Deadline
