@@ -1082,11 +1082,10 @@ function renderFollowUpOptions() {
   const selected = sourceSelect.value;
   const studentId = studentSelect.value;
   const sourceNotes = state.notes
-    .filter((note) => note.type !== "Follow-up")
     .filter((note) => !studentId || note.studentId === studentId)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
-  sourceSelect.innerHTML = `<option value="">Choose original note</option>`;
+  sourceSelect.innerHTML = `<option value="">Choose previous note</option>`;
   sourceNotes.forEach((note) => {
     const option = document.createElement("option");
     option.value = note.id;
