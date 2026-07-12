@@ -9,17 +9,18 @@ const GOOGLE_SCOPES = "https://www.googleapis.com/auth/calendar.readonly https:/
 const today = new Date();
 const isoToday = toISODate(today);
 const tomorrow = addDays(today, 1);
-const yesterday = addDays(today, -1);
+
+const demoTaskTitles = new Set([
+  "Finish university acceptance spreadsheet",
+  "Email University of Leeds representative",
+  "Prepare tomorrow's lesson on Human Development",
+  "Update CIALFO documents",
+  "Submit internship proposal",
+  "Finish CAT4 report"
+]);
 
 const seedData = {
-  tasks: [
-    { id: crypto.randomUUID(), title: "Finish university acceptance spreadsheet", category: "Admin", priority: "High", due: isoToday, status: "Open" },
-    { id: crypto.randomUUID(), title: "Email University of Leeds representative", category: "University", priority: "High", due: isoToday, status: "Open" },
-    { id: crypto.randomUUID(), title: "Prepare tomorrow's lesson on Human Development", category: "Teaching", priority: "Medium", due: toISODate(tomorrow), status: "Open" },
-    { id: crypto.randomUUID(), title: "Update CIALFO documents", category: "Counselling", priority: "High", due: toISODate(yesterday), status: "Open" },
-    { id: crypto.randomUUID(), title: "Submit internship proposal", category: "Admin", priority: "Medium", due: toISODate(yesterday), status: "Open" },
-    { id: crypto.randomUUID(), title: "Finish CAT4 report", category: "Admin", priority: "High", due: toISODate(yesterday), status: "Open" }
-  ],
+  tasks: [],
   schedule: [
     { id: crypto.randomUUID(), time: "08:00", title: "DP Psychology Year 1", location: "Room 204" },
     { id: crypto.randomUUID(), time: "10:00", title: "Student university check-in", location: "Counselling Office" },
@@ -43,6 +44,7 @@ let googleTokenClient = null;
 let googleConfigured = false;
 let googleReady = false;
 let googleConnected = false;
+let deadlineTaskId = "";
 
 const viewTitles = {
   today: "Hi Michael",
@@ -483,9 +485,39 @@ function cleanupStudentRecords() {
   return [...invalidIds];
 }
 
+function cleanupDemoRecords() {
+  const removedTaskIds = [];
+  const removedNoteIds = [];
+
+  state.tasks = state.tasks.filter((task) => {
+    const isDemoTask = demoTaskTitles.has(task.title);
+    if (isDemoTask) removedTaskIds.push(task.id);
+    return !isDemoTask;
+  });
+
+  state.notes = state.notes.filter((note) => {
+    const text = normalizeText(note.text);
+    const isDemoNote = text.includes("student a wants mechanical engineering in australia");
+    if (isDemoNote) removedNoteIds.push(note.id);
+    return !isDemoNote;
+  });
+
+  return { taskIds: removedTaskIds, noteIds: removedNoteIds };
+}
+
 async function deleteCloudStudents(studentIds) {
   if (!supabaseClient || !currentUser || !studentIds.length) return;
   await supabaseClient.from("students").delete().in("id", studentIds);
+}
+
+async function deleteCloudTasks(taskIds) {
+  if (!supabaseClient || !currentUser || !taskIds.length) return;
+  await supabaseClient.from("tasks").delete().in("id", taskIds);
+}
+
+async function deleteCloudNotes(noteIds) {
+  if (!supabaseClient || !currentUser || !noteIds.length) return;
+  await supabaseClient.from("notes").delete().in("id", noteIds);
 }
 
 function isInvalidStudentRecord(student) {
@@ -537,8 +569,15 @@ async function loadCloudData() {
     notes: notesResult.data.map(fromCloudNote)
   };
   const removedStudentIds = cleanupStudentRecords();
+  const removedDemoIds = cleanupDemoRecords();
   if (removedStudentIds.length) {
     await deleteCloudStudents(removedStudentIds);
+  }
+  if (removedDemoIds.taskIds.length) {
+    await deleteCloudTasks(removedDemoIds.taskIds);
+  }
+  if (removedDemoIds.noteIds.length) {
+    await deleteCloudNotes(removedDemoIds.noteIds);
   }
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   renderAll();
@@ -571,6 +610,9 @@ function toCloudTask(task) {
     priority: task.priority,
     due_date: task.due,
     status: task.status,
+    student_id: task.studentId || null,
+    needs_deadline: Boolean(task.needsDeadline),
+    follow_up_task: Boolean(task.followUpTask),
     source: "app",
     updated_at: new Date().toISOString()
   };
@@ -583,7 +625,10 @@ function fromCloudTask(row) {
     category: row.category,
     priority: row.priority,
     due: row.due_date,
-    status: row.status
+    status: row.status,
+    studentId: row.student_id || "",
+    needsDeadline: Boolean(row.needs_deadline),
+    followUpTask: Boolean(row.follow_up_task)
   };
 }
 
@@ -650,6 +695,7 @@ function fromCloudNote(row) {
 
 function renderAll() {
   cleanupStudentRecords();
+  cleanupDemoRecords();
   document.getElementById("todayDate").textContent = new Intl.DateTimeFormat("en", {
     weekday: "long",
     month: "long",
@@ -685,6 +731,7 @@ function wireNavigation() {
 
 function wireForms() {
   const taskDialog = document.getElementById("taskDialog");
+  const deadlineDialog = document.getElementById("deadlineDialog");
   const studentDialog = document.getElementById("studentDialog");
   const authDialog = document.getElementById("authDialog");
 
@@ -749,11 +796,31 @@ function wireForms() {
       category: document.getElementById("taskCategory").value,
       priority: document.getElementById("taskPriority").value,
       due: document.getElementById("taskDue").value,
-      status: "Open"
+      status: "Open",
+      studentId: "",
+      needsDeadline: false,
+      followUpTask: false
     });
     event.target.reset();
     await saveState();
     taskDialog.close();
+    renderAll();
+  });
+
+  document.getElementById("deadlineForm").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (event.submitter?.value === "cancel") {
+      deadlineTaskId = "";
+      deadlineDialog.close();
+      return;
+    }
+    const task = state.tasks.find((item) => item.id === deadlineTaskId);
+    if (!task) return;
+    task.due = document.getElementById("deadlineDate").value;
+    task.needsDeadline = false;
+    await saveState();
+    deadlineTaskId = "";
+    deadlineDialog.close();
     renderAll();
   });
 
@@ -893,11 +960,15 @@ function renderTasks() {
         <td><strong>${escapeHTML(task.title)}</strong></td>
         <td>${escapeHTML(task.category)}</td>
         <td><span class="pill ${task.priority.toLowerCase()}">${escapeHTML(task.priority)}</span></td>
-        <td>${formatDate(task.due)}</td>
+        <td>${renderTaskDue(task)}</td>
         <td><button class="status-button ${task.status === "Done" ? "done" : ""}" data-task="${task.id}">${escapeHTML(task.status)}</button></td>
       </tr>
     `);
-    row.querySelector("button").addEventListener("click", () => toggleTask(task.id));
+    row.querySelector("[data-task]").addEventListener("click", () => toggleTask(task.id));
+    const deadlineButton = row.querySelector("[data-deadline-task]");
+    if (deadlineButton) {
+      deadlineButton.addEventListener("click", () => openDeadlineDialog(task.id));
+    }
     table.appendChild(row);
   });
 }
@@ -1071,7 +1142,7 @@ function taskCard(task) {
       <div class="task-meta">
         <span class="pill">${escapeHTML(task.category)}</span>
         <span class="pill ${task.priority.toLowerCase()}">${escapeHTML(task.priority)}</span>
-        <span class="pill">${formatDate(task.due)}</span>
+        <span class="pill ${task.needsDeadline ? "deadline" : ""}">${task.needsDeadline ? "Set deadline" : formatDate(task.due)}</span>
       </div>
     </article>
   `);
@@ -1189,6 +1260,7 @@ async function addNote(text, type = "Check-in", persist = true, studentId = "", 
       student.studentStatus = statusUpdate;
       if (statusUpdate === "yellow" || statusUpdate === "red") {
         student.nextAction = student.nextAction || "Follow up required";
+        ensureFollowUpTask(student, statusUpdate);
       }
     }
   }
@@ -1197,6 +1269,32 @@ async function addNote(text, type = "Check-in", persist = true, studentId = "", 
     await saveState();
     renderAll();
   }
+}
+
+function ensureFollowUpTask(student, statusUpdate) {
+  const existing = state.tasks.find((task) => task.studentId === student.id && task.followUpTask && task.status !== "Done");
+  const priority = statusUpdate === "red" ? "High" : "Medium";
+  const title = `Meet ${student.name} for follow-up`;
+
+  if (existing) {
+    existing.title = title;
+    existing.category = "Counselling";
+    existing.priority = priority;
+    existing.needsDeadline = existing.needsDeadline || !existing.due;
+    return;
+  }
+
+  state.tasks.push({
+    id: crypto.randomUUID(),
+    title,
+    category: "Counselling",
+    priority,
+    due: isoToday,
+    status: "Open",
+    studentId: student.id,
+    needsDeadline: true,
+    followUpTask: true
+  });
 }
 
 function getStudentById(id) {
@@ -1245,6 +1343,20 @@ function getFilteredTasks() {
   if (taskFilter === "overdue") return sortTasks(getOverdueTasks());
   if (taskFilter === "done") return sortTasks(tasks);
   return sortTasks(tasks);
+}
+
+function renderTaskDue(task) {
+  if (!task.needsDeadline) return escapeHTML(formatDate(task.due));
+  return `<button class="status-button deadline-button" data-deadline-task="${escapeHTML(task.id)}">Set deadline</button>`;
+}
+
+function openDeadlineDialog(taskId) {
+  const task = state.tasks.find((item) => item.id === taskId);
+  if (!task) return;
+  deadlineTaskId = taskId;
+  document.getElementById("deadlineTaskTitle").textContent = task.title;
+  document.getElementById("deadlineDate").value = task.due || isoToday;
+  document.getElementById("deadlineDialog").showModal();
 }
 
 function sortTasks(tasks) {

@@ -10,3 +10,8 @@ alter table notes
   add column if not exists student_id uuid references students(id) on delete set null,
   add column if not exists follow_up_note_id uuid references notes(id) on delete set null,
   add column if not exists status_update text;
+
+alter table tasks
+  add column if not exists student_id uuid references students(id) on delete set null,
+  add column if not exists needs_deadline boolean not null default false,
+  add column if not exists follow_up_task boolean not null default false;

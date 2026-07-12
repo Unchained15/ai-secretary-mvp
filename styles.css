@@ -537,6 +537,18 @@ tr:last-child td {
   background: #edf8f2;
 }
 
+.deadline-button,
+.pill.deadline {
+  border-color: #d7b35c;
+  color: #8a5a10;
+  background: #fff7e8;
+}
+
+.deadline-button:hover {
+  border-color: #c49028;
+  background: #ffefd1;
+}
+
 .search-input,
 input,
 select,
