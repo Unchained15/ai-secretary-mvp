@@ -370,23 +370,43 @@ async function importStudentsFromSheet() {
 
 function parseStudentSheetRows(rows) {
   if (!rows.length) return [];
-  const headers = rows[0].map((value) => String(value).trim().toLowerCase());
+  const nonEmptyRows = rows.filter((row) => row.some((value) => String(value || "").trim()));
+  if (!nonEmptyRows.length) return [];
+
+  const headers = nonEmptyRows[0].map((value) => String(value).trim().toLowerCase());
   const nameIndex = findHeaderIndex(headers, ["name", "student", "student name", "student's name", "students name"]);
   const classIndex = findHeaderIndex(headers, ["class", "homeroom", "section"]);
   const gradeIndex = findHeaderIndex(headers, ["grade", "year", "level"]);
   const parentNameIndex = findHeaderIndex(headers, ["parents name", "parent name", "guardian name"]);
   const parentEmailIndex = findHeaderIndex(headers, ["parents email", "parent email", "guardian email"]);
   const emailIndex = findHeaderIndex(headers, ["student email", "student e-mail", "email", "e-mail", "mail"]);
+  const hasHeader = nameIndex >= 0;
+  const dataRows = hasHeader ? nonEmptyRows.slice(1) : nonEmptyRows;
 
-  return rows.slice(1)
-    .map((row) => ({
-      name: String(row[nameIndex] || "").trim(),
-      className: classIndex >= 0 ? String(row[classIndex] || "").trim() : "",
-      grade: gradeIndex >= 0 ? String(row[gradeIndex] || "").trim() : "",
-      parentName: parentNameIndex >= 0 ? String(row[parentNameIndex] || "").trim() : "",
-      parentEmail: parentEmailIndex >= 0 ? String(row[parentEmailIndex] || "").trim() : "",
-      email: emailIndex >= 0 ? String(row[emailIndex] || "").trim() : ""
-    }))
+  return dataRows
+    .map((row) => {
+      if (hasHeader) {
+        return {
+          name: String(row[nameIndex] || "").trim(),
+          className: classIndex >= 0 ? String(row[classIndex] || "").trim() : "",
+          grade: gradeIndex >= 0 ? String(row[gradeIndex] || "").trim() : "",
+          parentName: parentNameIndex >= 0 ? String(row[parentNameIndex] || "").trim() : "",
+          parentEmail: parentEmailIndex >= 0 ? String(row[parentEmailIndex] || "").trim() : "",
+          email: emailIndex >= 0 ? String(row[emailIndex] || "").trim() : ""
+        };
+      }
+
+      return {
+        name: String(row[0] || "").trim(),
+        grade: String(row[1] || "").trim(),
+        className: String(row[2] || "").trim(),
+        parentName: String(row[3] || "").trim(),
+        parentEmail: String(row[4] || "").trim(),
+        email: String(row[5] || "").trim()
+      };
+    })
+    .filter((student) => normalizeText(student.name) !== "student's name")
+    .filter((student) => normalizeText(student.name) !== "student name")
     .filter((student) => student.name);
 }
 
