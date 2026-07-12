@@ -434,6 +434,21 @@ h2 {
   background: #eaf2fb;
 }
 
+.pill.status-green {
+  color: var(--green);
+  background: #edf8f2;
+}
+
+.pill.status-yellow {
+  color: var(--amber);
+  background: #fff7e8;
+}
+
+.pill.status-red {
+  color: var(--red);
+  background: #fff0ed;
+}
+
 .student-strip {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
@@ -653,9 +668,32 @@ textarea {
 }
 
 .student-main h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin: 0;
   overflow-wrap: anywhere;
   font-size: 1rem;
+}
+
+.student-status {
+  width: 10px;
+  min-width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #2fb875;
+}
+
+.student-status.status-green {
+  background: #2fb875;
+}
+
+.student-status.status-yellow {
+  background: #e5b85d;
+}
+
+.student-status.status-red {
+  background: #e5483b;
 }
 
 .student-main span,

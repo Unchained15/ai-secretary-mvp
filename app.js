@@ -458,6 +458,7 @@ function mergeImportedStudents(imported) {
         parentName: student.parentName,
         parentEmail: student.parentEmail,
         email: student.email,
+        studentStatus: "green",
         goal: "",
         nextAction: "",
         deadline: isoToday,
@@ -596,6 +597,7 @@ function toCloudStudent(student) {
     parent_name: student.parentName || "",
     parent_email: student.parentEmail || "",
     email: student.email || "",
+    student_status: student.studentStatus || "green",
     goal: student.goal,
     next_action: student.nextAction,
     deadline: student.deadline,
@@ -613,6 +615,7 @@ function fromCloudStudent(row) {
     parentName: row.parent_name || "",
     parentEmail: row.parent_email || "",
     email: row.email || "",
+    studentStatus: row.student_status || "green",
     goal: row.goal || "",
     nextAction: row.next_action || "",
     deadline: row.deadline || isoToday,
@@ -625,6 +628,8 @@ function toCloudNote(note) {
     id: note.id,
     owner_id: currentUser.id,
     student_id: note.studentId || null,
+    follow_up_note_id: note.followUpNoteId || null,
+    status_update: note.statusUpdate || null,
     note_type: note.type,
     body: note.text,
     created_at: note.createdAt
@@ -635,6 +640,8 @@ function fromCloudNote(row) {
   return {
     id: row.id,
     studentId: row.student_id || "",
+    followUpNoteId: row.follow_up_note_id || "",
+    statusUpdate: row.status_update || "",
     type: row.note_type,
     text: row.body,
     createdAt: row.created_at
@@ -655,6 +662,7 @@ function renderAll() {
   renderTasks();
   renderStudents();
   renderStudentOptions();
+  renderFollowUpOptions();
   renderNotes();
   renderAssistant();
   renderCounts();
@@ -773,9 +781,22 @@ function wireForms() {
   document.getElementById("noteForm").addEventListener("submit", async (event) => {
     event.preventDefault();
     const text = document.getElementById("noteText").value.trim();
+    const type = document.getElementById("noteType").value;
+    const studentId = document.getElementById("noteStudent").value;
+    const statusUpdate = document.getElementById("noteStatus").value;
+    const followUpNoteId = document.getElementById("followUpSource").value;
     if (!text) return;
-    await addNote(text, document.getElementById("noteType").value, true, document.getElementById("noteStudent").value);
+    if ((type === "Follow-up" || statusUpdate) && !studentId) {
+      document.getElementById("noteStudent").focus();
+      return;
+    }
+    if (type === "Follow-up" && !followUpNoteId) {
+      document.getElementById("followUpSource").focus();
+      return;
+    }
+    await addNote(text, type, true, studentId, statusUpdate, followUpNoteId);
     event.target.reset();
+    renderFollowUpOptions();
   });
 
   document.getElementById("assistantForm").addEventListener("submit", async (event) => {
@@ -789,6 +810,8 @@ function wireForms() {
 
   document.getElementById("generateBriefing").addEventListener("click", renderBriefing);
   document.getElementById("studentSearch").addEventListener("input", renderStudents);
+  document.getElementById("noteStudent").addEventListener("change", renderFollowUpOptions);
+  document.getElementById("noteType").addEventListener("change", renderFollowUpOptions);
   document.getElementById("connectCalendar").addEventListener("click", connectGoogleCalendar);
   document.getElementById("refreshCalendar").addEventListener("click", loadTodayCalendarEvents);
   document.getElementById("importStudents").addEventListener("click", importStudentsFromSheet);
@@ -851,9 +874,14 @@ function renderFollowups() {
   const list = document.getElementById("followupList");
   list.innerHTML = "";
   [...state.students]
-    .sort((a, b) => a.deadline.localeCompare(b.deadline))
+    .filter((student) => ["yellow", "red"].includes(student.studentStatus))
+    .sort((a, b) => statusRank(a.studentStatus) - statusRank(b.studentStatus) || a.name.localeCompare(b.name))
     .slice(0, 3)
     .forEach((student) => list.appendChild(studentCard(student)));
+}
+
+function statusRank(status) {
+  return { red: 0, yellow: 1, green: 2 }[status || "green"] ?? 3;
 }
 
 function renderTasks() {
@@ -965,6 +993,38 @@ function renderStudentOptions() {
   select.value = selected;
 }
 
+function renderFollowUpOptions() {
+  const typeSelect = document.getElementById("noteType");
+  const studentSelect = document.getElementById("noteStudent");
+  const sourceLabel = document.getElementById("followUpSourceLabel");
+  const sourceSelect = document.getElementById("followUpSource");
+  if (!typeSelect || !studentSelect || !sourceLabel || !sourceSelect) return;
+
+  const isFollowUp = typeSelect.value === "Follow-up";
+  sourceLabel.classList.toggle("hidden", !isFollowUp);
+  sourceSelect.required = isFollowUp;
+  if (!isFollowUp) {
+    sourceSelect.value = "";
+    return;
+  }
+
+  const selected = sourceSelect.value;
+  const studentId = studentSelect.value;
+  const sourceNotes = state.notes
+    .filter((note) => note.type !== "Follow-up")
+    .filter((note) => !studentId || note.studentId === studentId)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+
+  sourceSelect.innerHTML = `<option value="">Choose original note</option>`;
+  sourceNotes.forEach((note) => {
+    const option = document.createElement("option");
+    option.value = note.id;
+    option.textContent = `${note.type} - ${formatDateTime(note.createdAt)} - ${truncateText(note.text, 52)}`;
+    sourceSelect.appendChild(option);
+  });
+  sourceSelect.value = selected;
+}
+
 function renderNotes() {
   const list = document.getElementById("noteList");
   list.innerHTML = "";
@@ -972,13 +1032,16 @@ function renderNotes() {
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     .forEach((note) => {
       const student = getStudentById(note.studentId);
+      const sourceNote = getNoteById(note.followUpNoteId);
       list.appendChild(elementFromHTML(`
         <article class="note-card">
           <h3>${escapeHTML(student ? student.name : note.type)}</h3>
           <p>${escapeHTML(note.text)}</p>
           <div class="note-meta">
-            ${student ? `<span class="pill">${escapeHTML(note.type)}</span>` : ""}
-            <span class="pill">${new Date(note.createdAt).toLocaleString([], { dateStyle: "medium", timeStyle: "short" })}</span>
+            <span class="pill">${escapeHTML(note.type)}</span>
+            ${note.statusUpdate ? `<span class="pill status-${escapeHTML(note.statusUpdate)}">${escapeHTML(titleCase(note.statusUpdate))}</span>` : ""}
+            ${sourceNote ? `<span class="pill">From: ${escapeHTML(sourceNote.type)} ${escapeHTML(formatDateTime(sourceNote.createdAt))}</span>` : ""}
+            <span class="pill">${escapeHTML(formatDateTime(note.createdAt))}</span>
           </div>
         </article>
       `));
@@ -1018,7 +1081,7 @@ function studentCard(student) {
   return elementFromHTML(`
     <article class="student-card">
       <div class="student-main">
-        <h3>${escapeHTML(student.name)}</h3>
+        <h3><span class="student-status status-${escapeHTML(student.studentStatus || "green")}"></span>${escapeHTML(student.name)}</h3>
         <span>${escapeHTML([student.grade, student.className].filter(Boolean).join(" / ") || "No class details")}</span>
       </div>
       <div class="student-contact">
@@ -1047,7 +1110,7 @@ async function handleAssistant(text) {
     });
   } else if (lower.includes("student") || lower.includes("follow up") || lower.includes("follow-up")) {
     const student = findMentionedStudent(text);
-    await addNote(text, "Meeting", false, student?.id || "");
+    await addNote(text, "Check-in", false, student?.id || "");
     state.assistant.push({
       role: "assistant",
       text: student ? `I saved that note under ${student.name}.` : "I saved that as a student follow-up note. Choose a student in Notes when you want to attach it manually."
@@ -1058,7 +1121,7 @@ async function handleAssistant(text) {
       text: "Subject: Tomorrow's lesson\n\nDear Parents,\n\nI hope you are well. Tomorrow we will continue our learning with a focused lesson and a short applied activity. I will share any required follow-up after class.\n\nKind regards,\nMichael"
     });
   } else {
-    await addNote(text, "Admin", false);
+    await addNote(text, "Other", false);
     state.assistant.push({
       role: "assistant",
       text: "I captured that as a note. Try saying 'add task...' when you want me to create a dated action."
@@ -1108,14 +1171,28 @@ function parseTask(text) {
   };
 }
 
-async function addNote(text, type = "Meeting", persist = true, studentId = "") {
+async function addNote(text, type = "Check-in", persist = true, studentId = "", statusUpdate = "", followUpNoteId = "") {
+  const createdAt = new Date().toISOString();
   state.notes.push({
     id: crypto.randomUUID(),
     studentId,
+    followUpNoteId,
+    statusUpdate,
     type,
     text,
-    createdAt: new Date().toISOString()
+    createdAt
   });
+
+  if (studentId && statusUpdate) {
+    const student = getStudentById(studentId);
+    if (student) {
+      student.studentStatus = statusUpdate;
+      if (statusUpdate === "yellow" || statusUpdate === "red") {
+        student.nextAction = student.nextAction || "Follow up required";
+      }
+    }
+  }
+
   if (persist) {
     await saveState();
     renderAll();
@@ -1124,6 +1201,10 @@ async function addNote(text, type = "Meeting", persist = true, studentId = "") {
 
 function getStudentById(id) {
   return state.students.find((student) => student.id === id);
+}
+
+function getNoteById(id) {
+  return state.notes.find((note) => note.id === id);
 }
 
 function findMentionedStudent(text) {
@@ -1175,6 +1256,19 @@ function formatDate(value) {
   if (value === isoToday) return "Today";
   if (value === toISODate(tomorrow)) return "Tomorrow";
   return new Date(`${value}T00:00:00`).toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
+function formatDateTime(value) {
+  return new Date(value).toLocaleString([], { dateStyle: "medium", timeStyle: "short" });
+}
+
+function titleCase(value) {
+  return String(value || "").charAt(0).toUpperCase() + String(value || "").slice(1);
+}
+
+function truncateText(value, maxLength) {
+  const text = String(value || "").trim();
+  return text.length > maxLength ? `${text.slice(0, maxLength - 1)}...` : text;
 }
 
 function addDays(date, days) {

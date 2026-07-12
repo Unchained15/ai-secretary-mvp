@@ -137,10 +137,27 @@
               <label>
                 Type
                 <select id="noteType">
-                  <option>Meeting</option>
-                  <option>Parent Call</option>
-                  <option>Lesson</option>
-                  <option>Admin</option>
+                  <option>Check-in</option>
+                  <option>Follow-up</option>
+                  <option>Administrative</option>
+                  <option>Other</option>
+                </select>
+              </label>
+            </div>
+            <div class="field-grid">
+              <label>
+                Status Update
+                <select id="noteStatus">
+                  <option value="">No change</option>
+                  <option value="green">Green</option>
+                  <option value="yellow">Yellow</option>
+                  <option value="red">Red</option>
+                </select>
+              </label>
+              <label class="hidden" id="followUpSourceLabel">
+                Following Up From
+                <select id="followUpSource">
+                  <option value="">Choose original note</option>
                 </select>
               </label>
             </div>
