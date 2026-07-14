@@ -5,6 +5,7 @@ const GOOGLE_IDENTITY_SCRIPT = "https://accounts.google.com/gsi/client";
 const GOOGLE_CALENDAR_DISCOVERY_DOC = "https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest";
 const GOOGLE_SHEETS_DISCOVERY_DOC = "https://sheets.googleapis.com/$discovery/rest?version=v4";
 const GOOGLE_SCOPES = "https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/spreadsheets.readonly";
+const GOOGLE_TOKEN_STORAGE_KEY = "school-secretary-google-token";
 
 const today = new Date();
 const isoToday = toISODate(today);
@@ -37,6 +38,7 @@ const seedData = {
 let state = loadState();
 let taskFilter = "all";
 let supabaseClient = null;
+let currentSession = null;
 let currentUser = null;
 let cloudReady = false;
 let syncing = false;
@@ -91,12 +93,19 @@ async function initializeSupabase() {
     await loadScript(SUPABASE_SCRIPT);
     supabaseClient = window.supabase.createClient(config.SUPABASE_URL, config.SUPABASE_ANON_KEY);
     const { data } = await supabaseClient.auth.getSession();
-    currentUser = data.session?.user || null;
+    currentSession = data.session || null;
+    currentUser = currentSession?.user || null;
     cloudReady = Boolean(currentUser);
 
     supabaseClient.auth.onAuthStateChange(async (_event, session) => {
+      currentSession = session || null;
       currentUser = session?.user || null;
       cloudReady = Boolean(currentUser);
+      if (!currentUser) {
+        clearGoogleAccess();
+      } else if (googleReady) {
+        await restoreGoogleAccess();
+      }
       if (cloudReady) {
         await loadCloudData();
       }
@@ -173,6 +182,7 @@ async function initializeGoogleCalendar() {
     googleReady = true;
     renderCalendarState();
     renderStudentSyncState();
+    await restoreGoogleAccess();
   } catch (error) {
     googleReady = false;
     googleConnected = false;
@@ -271,6 +281,68 @@ async function connectGoogleCalendar() {
   await requestGoogleAccess(loadTodayCalendarEvents, "Calendar error");
 }
 
+function googleTokenStorageKey() {
+  return `${GOOGLE_TOKEN_STORAGE_KEY}:${currentUser?.id || "local"}`;
+}
+
+function saveGoogleAccessToken(response) {
+  if (!response?.access_token) return;
+  const expiresInSeconds = Number(response.expires_in || 3600);
+  localStorage.setItem(googleTokenStorageKey(), JSON.stringify({
+    access_token: response.access_token,
+    scope: response.scope || GOOGLE_SCOPES,
+    token_type: response.token_type || "Bearer",
+    expiresAt: Date.now() + (expiresInSeconds * 1000)
+  }));
+}
+
+function readGoogleAccessToken() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(googleTokenStorageKey()));
+    if (!saved?.access_token || !saved.expiresAt || saved.expiresAt <= Date.now() + 60000) {
+      localStorage.removeItem(googleTokenStorageKey());
+      return null;
+    }
+    return saved;
+  } catch {
+    localStorage.removeItem(googleTokenStorageKey());
+    return null;
+  }
+}
+
+function clearGoogleAccess() {
+  if (window.gapi?.client) {
+    window.gapi.client.setToken(null);
+  }
+  googleConnected = false;
+  renderCalendarState();
+  renderStudentSyncState();
+}
+
+async function restoreGoogleAccess() {
+  if (!googleReady || !window.gapi?.client) return false;
+
+  let token = readGoogleAccessToken();
+  if (!token && currentSession?.provider_token) {
+    token = {
+      access_token: currentSession.provider_token,
+      scope: GOOGLE_SCOPES,
+      token_type: "Bearer",
+      expires_in: 3600
+    };
+    saveGoogleAccessToken(token);
+  }
+
+  if (!token) return false;
+
+  window.gapi.client.setToken(token);
+  googleConnected = true;
+  renderCalendarState();
+  renderStudentSyncState();
+  await loadTodayCalendarEvents();
+  return true;
+}
+
 async function requestGoogleAccess(afterAccess, errorLabel) {
   if (!googleReady || !googleTokenClient) return;
 
@@ -280,6 +352,7 @@ async function requestGoogleAccess(afterAccess, errorLabel) {
       renderStudentSyncState(errorLabel);
       return;
     }
+    saveGoogleAccessToken(response);
     googleConnected = true;
     renderCalendarState();
     renderStudentSyncState();
@@ -318,7 +391,13 @@ async function loadTodayCalendarEvents() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
     renderAll();
   } catch (error) {
-    renderCalendarState("Calendar error");
+    if (error?.status === 401 || error?.result?.error?.code === 401) {
+      localStorage.removeItem(googleTokenStorageKey());
+      clearGoogleAccess();
+      renderCalendarState("Reconnect needed");
+    } else {
+      renderCalendarState("Calendar error");
+    }
     console.warn(error);
   }
 }
@@ -749,6 +828,7 @@ function wireForms() {
   document.getElementById("signInButton").addEventListener("click", () => authDialog.showModal());
   document.getElementById("signOutButton").addEventListener("click", async () => {
     if (supabaseClient) await supabaseClient.auth.signOut();
+    currentSession = null;
     currentUser = null;
     cloudReady = false;
     renderAuthState();
@@ -788,7 +868,8 @@ function wireForms() {
     const { error } = await supabaseClient.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: window.location.origin + window.location.pathname
+        redirectTo: window.location.origin + window.location.pathname,
+        scopes: GOOGLE_SCOPES
       }
     });
 
