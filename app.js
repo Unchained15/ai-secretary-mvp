@@ -282,7 +282,7 @@ async function connectGoogleCalendar() {
 }
 
 function googleTokenStorageKey() {
-  return `${GOOGLE_TOKEN_STORAGE_KEY}:${currentUser?.id || "local"}`;
+  return GOOGLE_TOKEN_STORAGE_KEY;
 }
 
 function saveGoogleAccessToken(response) {
@@ -292,6 +292,7 @@ function saveGoogleAccessToken(response) {
     access_token: response.access_token,
     scope: response.scope || GOOGLE_SCOPES,
     token_type: response.token_type || "Bearer",
+    ownerId: currentUser?.id || "",
     expiresAt: Date.now() + (expiresInSeconds * 1000)
   }));
 }
@@ -301,6 +302,9 @@ function readGoogleAccessToken() {
     const saved = JSON.parse(localStorage.getItem(googleTokenStorageKey()));
     if (!saved?.access_token || !saved.expiresAt || saved.expiresAt <= Date.now() + 60000) {
       localStorage.removeItem(googleTokenStorageKey());
+      return null;
+    }
+    if (saved.ownerId && currentUser?.id && saved.ownerId !== currentUser.id) {
       return null;
     }
     return saved;
